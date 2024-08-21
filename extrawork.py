@@ -40,6 +40,76 @@ def load_dataframe():
     else:
         st.info("Please upload a CSV file.")
         return None
+    
+
+def normalize_and_plot(dataframes):
+    # Ensure dataframes is a list and check if it's empty
+    if not isinstance(dataframes, list) or len(dataframes) == 0:
+        st.error("No files uploaded. Please upload at least one CSV file.")
+        return
+
+    # Step 1: Ask user to choose the normalization scope
+    scope = st.radio("Do you want to normalize and plot data for:", ["Single File", "Multiple Files", "All Files"], key="normalize_scope")
+
+    if scope == "Single File":
+        # For a single file, select one DataFrame
+        selected_idx = st.selectbox("Select the DataFrame:", range(len(dataframes)), format_func=lambda x: f"File {x+1}", key="single_file_selector")
+
+        selected_dfs = [dataframes[selected_idx]]
+    elif scope == "Multiple Files":
+        # For multiple files, allow the user to select multiple DataFrames
+        selected_dfs = st.multiselect("Select DataFrames to normalize and plot:", range(len(dataframes)), format_func=lambda x: f"File {x+1}", key="multiple_file_selector")
+
+        if not selected_dfs:
+            st.error("No files selected. Please select at least one file.")
+            return
+        selected_dfs = [dataframes[idx] for idx in selected_dfs]
+
+    elif scope == "All Files":
+        # Use all DataFrames
+        selected_dfs = dataframes
+
+    # Ensure there are selected DataFrames and that none of them are empty
+    if not selected_dfs or any(df.empty for df in selected_dfs):
+        st.error("One or more selected DataFrames are empty.")
+        return
+
+    # Step 2: Select columns and plot type
+    graph_type = st.selectbox("Select the graph type:", ['Scatter Plot', 'Line Plot', 'Box Plot', 'Bar Plot'], key="normalize_graph_type")
+    x_col = st.selectbox("Select the column for the x-axis:", dataframes[0].columns, key="normalize_x_axis_col")
+    y_col = st.selectbox("Select the column for the y-axis:", dataframes[0].columns, key="normalize_y_axis_col")
+
+    # Define colors
+    colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'purple', 'orange', 'brown']
+    color_count = len(selected_dfs)
+    if color_count > len(colors):
+        colors *= (color_count // len(colors)) + 1
+    colors = colors[:color_count]
+
+    if st.button("Normalize and Plot"):
+        plt.figure(figsize=(10, 6))
+        for i, df in enumerate(selected_dfs):
+            new_df = df.copy()
+            max_values = new_df.iloc[:, 1:7].max()  # Adjust column range as necessary
+            for column in new_df.columns[1:7]:
+                new_df[column] = new_df[column] / max_values[column]
+
+            if graph_type == 'Scatter Plot':
+                plt.scatter(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}", color=colors[i])
+            elif graph_type == 'Line Plot':
+                plt.plot(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}", color=colors[i])
+            elif graph_type == 'Box Plot':
+                plt.boxplot([new_df[x_col], new_df[y_col]], positions=[i*2, i*2+1], labels=[f"Dataset {i+1} - {x_col}", f"Dataset {i+1} - {y_col}"])
+            elif graph_type == 'Bar Plot':
+                plt.bar(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}", color=colors[i])
+
+        plt.xlabel(x_col)
+        plt.ylabel(y_col)
+        plt.title("Normalized Graph")
+        plt.legend()
+        st.pyplot(plt)
+
+
 
 
 # Function to plot the graph based on user input (single or multiple files)
@@ -77,43 +147,39 @@ def plot_graph(dataframes):
                 plt.title("Comparison Plot")
                 plt.legend()
                 st.pyplot(plt)
-# Function to plot the graph with the range selection
+        normalize = st.radio("Would you like to normalize the data?", ('Yes', 'No'))
+        normalize = normalize == 'Yes'
+        normalize_and_plot(dataframes)
+
 
 def plot_graph_with_range(dataframes):
-    if not dataframes:
+    if not isinstance(dataframes, list) or len(dataframes) == 0:
         st.error("No files uploaded. Please upload at least one CSV file.")
         return
 
-    # Step 1: Ask user if they want to operate on a single file or multiple files
     operation_choice = st.radio("Do you want to perform this operation on a single file or multiple files?", ["Single File", "Multiple Files"], key="operation_choice")
 
     selected_dfs = []
     if operation_choice == "Single File":
-        # For a single file, select one DataFrame
-        selected_idx = st.selectbox("Select the file", range(len(dataframes)), key="single_file_selector")
+        selected_idx = st.selectbox("Select the file", range(len(dataframes)), key="single_file_selector_range")
         selected_dfs.append(dataframes[selected_idx])
     else:
-        # For multiple files, allow the user to select multiple DataFrames
-        selected_idxs = st.multiselect("Select the files", range(len(dataframes)), key="multiple_file_selector")
-        for idx in selected_idxs:
-            selected_dfs.append(dataframes[idx])
+        selected_idxs = st.multiselect("Select the files", range(len(dataframes)), key="multiple_file_selector_range")
+        selected_dfs = [dataframes[idx] for idx in selected_idxs]
 
-    if not selected_dfs:
-        st.error("No files selected. Please select at least one file.")
+    if not selected_dfs or any(df.empty for df in selected_dfs):
+        st.error("No files selected or one or more selected DataFrames are empty.")
         return
 
-    # Step 2: Ask user if they want to create the DataFrame based on row or value
     range_type = st.radio("Do you want to create the DataFrame based on row or value?", ["Row", "Value"], key="range_type")
 
     new_dfs = []
     for i, df in enumerate(selected_dfs):
         if range_type == "Row":
-            # Existing functionality for row-based selection
             start_row = st.number_input(f"Enter the starting row (from) for DataFrame {i+1}:", min_value=0, max_value=len(df)-1, key=f"start_row_{i}")
             end_row = st.number_input(f"Enter the ending row (to) for DataFrame {i+1}:", min_value=0, max_value=len(df)-1, key=f"end_row_{i}")
             new_df = df.iloc[start_row:end_row+1]
         else:
-            # New functionality for value-based selection
             x_col_name = st.selectbox(f"Select the column for the value-based range (DataFrame {i+1}):", df.columns, key=f"x_col_name_{i}")
             min_val = st.number_input(f"Enter the minimum value for {x_col_name} (DataFrame {i+1}):", value=df[x_col_name].min(), key=f"min_val_{i}")
             max_val = st.number_input(f"Enter the maximum value for {x_col_name} (DataFrame {i+1}):", value=df[x_col_name].max(), key=f"max_val_{i}")
@@ -121,20 +187,24 @@ def plot_graph_with_range(dataframes):
 
         new_dfs.append(new_df)
 
-    # Step 3: Plot the graph for each DataFrame
-    graph_type = st.selectbox("Select the graph type:", ['Scatter Plot', 'Line Plot', 'Box Plot', 'Bar Plot'], key="graph_type")
-    x_col = st.selectbox("Select the column for the x-axis:", new_dfs[0].columns, key="x_axis_col")
-    y_col = st.selectbox("Select the column for the y-axis:", new_dfs[0].columns, key="y_axis_col")
+    graph_type = st.selectbox("Select the graph type:", ['Scatter Plot', 'Line Plot', 'Box Plot', 'Bar Plot'], key="range_graph_type")
+    x_col = st.selectbox("Select the column for the x-axis:", new_dfs[0].columns, key="range_x_axis_col")
+    y_col = st.selectbox("Select the column for the y-axis:", new_dfs[0].columns, key="range_y_axis_col")
 
-    if st.button("Plot Graph with Range"):
+    # Checkbox to view the modified dataset
+    if st.checkbox("View modified dataset?", key="view_modified_data"):
+        for i, new_df in enumerate(new_dfs):
+            st.write(f"Modified DataFrame {i+1}")
+            st.write(new_df)
+
+    # Button to plot graph
+    if st.button("Plot Graph with Range", key="plot_graph_with_range"):
         plt.figure(figsize=(10, 6))
-        
-        # Define a list of colors to use
         colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'purple', 'orange', 'brown']
         color_count = len(new_dfs)
         if color_count > len(colors):
             colors *= (color_count // len(colors)) + 1
-        colors = colors[:color_count]  # Ensure we have exactly the number of colors needed
+        colors = colors[:color_count]
 
         for i, new_df in enumerate(new_dfs):
             if graph_type == 'Scatter Plot':
@@ -152,66 +222,10 @@ def plot_graph_with_range(dataframes):
         plt.legend()
         st.pyplot(plt)
 
-def normalize_and_plot(dataframes):
-    if not dataframes:
-        st.error("No files uploaded. Please upload at least one CSV file.")
-        return
-
-    # Step 1: Ask user to choose the normalization scope
-    scope = st.radio("Do you want to normalize and plot data for:", ["Single File", "Multiple Files", "All Files"], key="normalize_scope")
-
-    if scope == "Single File":
-        # For a single file, select one DataFrame
-        selected_idx = st.selectbox("Select the DataFrame:", range(len(dataframes)), format_func=lambda x: f"File {x+1}", key="single_file_selector")
-        selected_dfs = [dataframes[selected_idx]]
-
-    elif scope == "Multiple Files":
-        # For multiple files, allow the user to select multiple DataFrames
-        selected_dfs = st.multiselect("Select DataFrames to normalize and plot:", range(len(dataframes)), format_func=lambda x: f"File {x+1}")
-
-        if not selected_dfs:
-            st.error("No files selected. Please select at least one file.")
-            return
-        selected_dfs = [dataframes[idx] for idx in selected_dfs]
-
-    elif scope == "All Files":
-        # Use all DataFrames
-        selected_dfs = dataframes
-
-    # Step 2: Select columns and plot type
-    graph_type = st.selectbox("Select the graph type:", ['Scatter Plot', 'Line Plot', 'Box Plot', 'Bar Plot'], key="graph_type")
-    x_col = st.selectbox("Select the column for the x-axis:", dataframes[0].columns, key="x_axis_col")
-    y_col = st.selectbox("Select the column for the y-axis:", dataframes[0].columns, key="y_axis_col")
-
-    # Define colors
-    colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'purple', 'orange', 'brown']
-    color_count = len(selected_dfs)
-    if color_count > len(colors):
-        colors *= (color_count // len(colors)) + 1
-    colors = colors[:color_count]
-
-    if st.button("Normalize and Plot"):
-        plt.figure(figsize=(10, 6))
-        for i, df in enumerate(selected_dfs):
-            new_df = df.copy()
-            max_values = new_df.iloc[:, 1:7].max()  # Adjust column range as necessary
-            for column in new_df.columns[1:7]:
-                new_df[column] = new_df[column] / max_values[column]
-
-            if graph_type == 'Scatter Plot':
-                plt.scatter(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}", color=colors[i])
-            elif graph_type == 'Line Plot':
-                plt.plot(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}", color=colors[i])
-            elif graph_type == 'Box Plot':
-                plt.boxplot([new_df[x_col], new_df[y_col]], positions=[i*2, i*2+1], labels=[f"Dataset {i+1} - {x_col}", f"Dataset {i+1} - {y_col}"])
-            elif graph_type == 'Bar Plot':
-                plt.bar(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}", color=colors[i])
-
-        plt.xlabel(x_col)
-        plt.ylabel(y_col)
-        plt.title("Normalized Graph")
-        plt.legend()
-        st.pyplot(plt)
+    # Normalization option
+    normalize = st.radio("Would you like to normalize the data?", ('Yes', 'No'), key="range_normalize_option")
+    if normalize == 'Yes':
+        normalize_and_plot(new_dfs)
 
 
 def add_column(dataframes):
