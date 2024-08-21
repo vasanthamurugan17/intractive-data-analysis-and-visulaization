@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 # Function to load and display the DataFrame(s)
 def load_dataframe():
     upload_type = st.radio("Do you want to upload a single file or multiple files?", ('Single File', 'Multiple Files'))
+    
+    # Handle file uploads based on the user's choice
     if upload_type == 'Single File':
         uploaded_files = st.file_uploader("Choose a CSV file", type="csv", accept_multiple_files=False)
     else:
@@ -13,16 +15,28 @@ def load_dataframe():
     if uploaded_files:
         if upload_type == 'Single File':
             uploaded_files = [uploaded_files]  # Convert to list for consistency
+        
         dataframes = []
+        
         for uploaded_file in uploaded_files:
             try:
-                df = pd.read_csv(uploaded_file)
+                # Read the CSV file, starting from the 8th row for feature names
+                df = pd.read_csv(uploaded_file, header=8)  # Set header=7 to use the 8th row as header
+                df = df.reset_index(drop=True)  # Reset index after skipping the first 7 rows
+
+                # Append the DataFrame to the list
                 dataframes.append(df)
+
+                # Optionally display the DataFrame
                 if st.checkbox(f"Do you want to display the DataFrame from {uploaded_file.name}?"):
                     st.write(df)
+            
+            # Handle exceptions during file reading
             except Exception as e:
                 st.error(f"Error loading file {uploaded_file.name}: {e}")
+        
         return dataframes
+    
     else:
         st.info("Please upload a CSV file.")
         return None
