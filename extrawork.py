@@ -2,6 +2,13 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 
+
+
+
+
+
+
+
 # Function to load and display the DataFrame(s)
 def load_dataframe():
     upload_type = st.radio("Do you want to upload a single file or multiple files?", ('Single File', 'Multiple Files'))
@@ -42,6 +49,20 @@ def load_dataframe():
         return None
     
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def normalize_and_plot(dataframes):
     # Ensure dataframes is a list and check if it's empty
     if not isinstance(dataframes, list) or len(dataframes) == 0:
@@ -76,15 +97,14 @@ def normalize_and_plot(dataframes):
 
     # Step 2: Select columns and plot type
     graph_type = st.selectbox("Select the graph type:", ['Scatter Plot', 'Line Plot', 'Box Plot', 'Bar Plot'], key="normalize_graph_type")
-    x_col = st.selectbox("Select the column for the x-axis:", dataframes[0].columns, key="normalize_x_axis_col")
-    y_col = st.selectbox("Select the column for the y-axis:", dataframes[0].columns, key="normalize_y_axis_col")
+    
+    # Allow multiple features to be selected for the x-axis and y-axis
+    x_cols = st.multiselect("Select the columns for the x-axis:", dataframes[0].columns, key="normalize_x_axis_cols")
+    y_cols = st.multiselect("Select the columns for the y-axis:", dataframes[0].columns, key="normalize_y_axis_cols")
 
     # Define colors
     colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'purple', 'orange', 'brown']
-    color_count = len(selected_dfs)
-    if color_count > len(colors):
-        colors *= (color_count // len(colors)) + 1
-    colors = colors[:color_count]
+    color_index = 0
 
     if st.button("Normalize and Plot"):
         plt.figure(figsize=(10, 6))
@@ -94,17 +114,21 @@ def normalize_and_plot(dataframes):
             for column in new_df.columns[1:7]:
                 new_df[column] = new_df[column] / max_values[column]
 
-            if graph_type == 'Scatter Plot':
-                plt.scatter(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}", color=colors[i])
-            elif graph_type == 'Line Plot':
-                plt.plot(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}", color=colors[i])
-            elif graph_type == 'Box Plot':
-                plt.boxplot([new_df[x_col], new_df[y_col]], positions=[i*2, i*2+1], labels=[f"Dataset {i+1} - {x_col}", f"Dataset {i+1} - {y_col}"])
-            elif graph_type == 'Bar Plot':
-                plt.bar(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}", color=colors[i])
+            for x_col in x_cols:
+                for y_col in y_cols:
+                    color = colors[color_index % len(colors)]
+                    color_index += 1  # Increment the color index to ensure unique colors
+                    if graph_type == 'Scatter Plot':
+                        plt.scatter(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}: {x_col} vs {y_col}", color=color)
+                    elif graph_type == 'Line Plot':
+                        plt.plot(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}: {x_col} vs {y_col}", color=color)
+                    elif graph_type == 'Box Plot':
+                        plt.boxplot([new_df[x_col], new_df[y_col]], positions=[i*2, i*2+1], labels=[f"Dataset {i+1} - {x_col}", f"Dataset {i+1} - {y_col}"])
+                    elif graph_type == 'Bar Plot':
+                        plt.bar(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}: {x_col} vs {y_col}", color=color)
 
-        plt.xlabel(x_col)
-        plt.ylabel(y_col)
+        plt.xlabel(", ".join(x_cols))
+        plt.ylabel(", ".join(y_cols))
         plt.title("Normalized Graph")
         plt.legend()
         st.pyplot(plt)
@@ -112,7 +136,30 @@ def normalize_and_plot(dataframes):
 
 
 
-# Function to plot the graph based on user input (single or multiple files)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def plot_graph(dataframes):
     if dataframes:
         plot_type = st.radio("Do you want to plot the graph based on a single file or multiple files?", ("Single File", "Multiple Files"))
@@ -120,36 +167,51 @@ def plot_graph(dataframes):
         if plot_type == "Single File":
             df_idx = st.selectbox("Select the DataFrame:", range(len(dataframes)))
             df = dataframes[df_idx]
-            x_col = st.selectbox("Select the column for the x-axis:", df.columns)
-            y_col = st.selectbox("Select the column for the y-axis:", df.columns)
+            x_cols = st.multiselect("Select the column(s) for the x-axis:", df.columns)
+            y_cols = st.multiselect("Select the column(s) for the y-axis:", df.columns)
             if st.button("Plot Graph (Single File)"):
                 plt.figure(figsize=(10, 6))
-                plt.plot(df[x_col], df[y_col], label=f"File {df_idx+1}", color="blue")
-                plt.xlabel(x_col)
-                plt.ylabel(y_col)
+                for x_col, y_col in zip(x_cols, y_cols):
+                    plt.plot(df[x_col], df[y_col], label=f"File {df_idx+1} - {x_col} vs {y_col}")
+                plt.xlabel(', '.join(x_cols))
+                plt.ylabel(', '.join(y_cols))
                 plt.title(f"Graph - File {df_idx+1}")
                 plt.legend()
                 st.pyplot(plt)
 
         elif plot_type == "Multiple Files":
             selected_dfs = st.multiselect("Select DataFrames for comparison:", range(len(dataframes)), format_func=lambda x: f"File {x+1}")
-            x_col = st.selectbox("Select the column for the x-axis:", dataframes[0].columns)
-            y_col = st.selectbox("Select the column for the y-axis:", dataframes[0].columns)
+            x_cols = st.multiselect("Select the column(s) for the x-axis:", dataframes[0].columns)
+            y_cols = st.multiselect("Select the column(s) for the y-axis:", dataframes[0].columns)
             colors = ['blue', 'green', 'red', 'cyan', 'magenta', 'yellow', 'black', 'purple', 'orange', 'pink']  # Predefined color list
             if st.button("Plot Graph (Multiple Files)"):
                 plt.figure(figsize=(10, 6))
                 for i, df_idx in enumerate(selected_dfs):
                     df = dataframes[df_idx]
                     color = colors[i % len(colors)]  # Cycle through the predefined colors
-                    plt.plot(df[x_col], df[y_col], label=f"File {df_idx+1}", color=color)
-                plt.xlabel(x_col)
-                plt.ylabel(y_col)
+                    for x_col, y_col in zip(x_cols, y_cols):
+                        plt.plot(df[x_col], df[y_col], label=f"File {df_idx+1} - {x_col} vs {y_col}", color=color)
+                plt.xlabel(', '.join(x_cols))
+                plt.ylabel(', '.join(y_cols))
                 plt.title("Comparison Plot")
                 plt.legend()
                 st.pyplot(plt)
+
         normalize = st.radio("Would you like to normalize the data?", ('Yes', 'No'))
         normalize = normalize == 'Yes'
         normalize_and_plot(dataframes)
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def plot_graph_with_range(dataframes):
@@ -174,22 +236,45 @@ def plot_graph_with_range(dataframes):
     range_type = st.radio("Do you want to create the DataFrame based on row or value?", ["Row", "Value"], key="range_type")
 
     new_dfs = []
-    for i, df in enumerate(selected_dfs):
-        if range_type == "Row":
-            start_row = st.number_input(f"Enter the starting row (from) for DataFrame {i+1}:", min_value=0, max_value=len(df)-1, key=f"start_row_{i}")
-            end_row = st.number_input(f"Enter the ending row (to) for DataFrame {i+1}:", min_value=0, max_value=len(df)-1, key=f"end_row_{i}")
-            new_df = df.iloc[start_row:end_row+1]
+
+    if range_type == "Row":
+        start_row = st.number_input(f"Enter the starting row (from) for all selected DataFrames:", min_value=0, max_value=len(selected_dfs[0])-1, key="start_row_all")
+        end_row = st.number_input(f"Enter the ending row (to) for all selected DataFrames:", min_value=0, max_value=len(selected_dfs[0])-1, key="end_row_all")
+        
+        apply_same_range = st.checkbox("Apply the same row range to all selected DataFrames?", key="apply_same_range_row")
+        if apply_same_range:
+            for df in selected_dfs:
+                new_df = df.iloc[start_row:end_row+1]
+                new_dfs.append(new_df)
         else:
-            x_col_name = st.selectbox(f"Select the column for the value-based range (DataFrame {i+1}):", df.columns, key=f"x_col_name_{i}")
-            min_val = st.number_input(f"Enter the minimum value for {x_col_name} (DataFrame {i+1}):", value=df[x_col_name].min(), key=f"min_val_{i}")
-            max_val = st.number_input(f"Enter the maximum value for {x_col_name} (DataFrame {i+1}):", value=df[x_col_name].max(), key=f"max_val_{i}")
-            new_df = df[(df[x_col_name] >= min_val) & (df[x_col_name] <= max_val)]
+            for i, df in enumerate(selected_dfs):
+                start_row = st.number_input(f"Enter the starting row (from) for DataFrame {i+1}:", min_value=0, max_value=len(df)-1, key=f"start_row_{i}")
+                end_row = st.number_input(f"Enter the ending row (to) for DataFrame {i+1}:", min_value=0, max_value=len(df)-1, key=f"end_row_{i}")
+                new_df = df.iloc[start_row:end_row+1]
+                new_dfs.append(new_df)
 
-        new_dfs.append(new_df)
+    else:  # Range based on values
+        x_col_name = st.selectbox(f"Select the column for the value-based range:", selected_dfs[0].columns, key="x_col_name_all")
+        min_val = st.number_input(f"Enter the minimum value for {x_col_name}:", value=selected_dfs[0][x_col_name].min(), key="min_val_all")
+        max_val = st.number_input(f"Enter the maximum value for {x_col_name}:", value=selected_dfs[0][x_col_name].max(), key="max_val_all")
 
+        apply_same_range = st.checkbox("Apply the same min and max values to all selected DataFrames?", key="apply_same_range_value")
+        if apply_same_range:
+            for df in selected_dfs:
+                new_df = df[(df[x_col_name] >= min_val) & (df[x_col_name] <= max_val)]
+                new_dfs.append(new_df)
+        else:
+            for i, df in enumerate(selected_dfs):
+                x_col_name = st.selectbox(f"Select the column for the value-based range (DataFrame {i+1}):", df.columns, key=f"x_col_name_{i}")
+                min_val = st.number_input(f"Enter the minimum value for {x_col_name} (DataFrame {i+1}):", value=df[x_col_name].min(), key=f"min_val_{i}")
+                max_val = st.number_input(f"Enter the maximum value for {x_col_name} (DataFrame {i+1}):", value=df[x_col_name].max(), key=f"max_val_{i}")
+                new_df = df[(df[x_col_name] >= min_val) & (df[x_col_name] <= max_val)]
+                new_dfs.append(new_df)
+
+    # Graph plotting and normalization options as before
     graph_type = st.selectbox("Select the graph type:", ['Scatter Plot', 'Line Plot', 'Box Plot', 'Bar Plot'], key="range_graph_type")
-    x_col = st.selectbox("Select the column for the x-axis:", new_dfs[0].columns, key="range_x_axis_col")
-    y_col = st.selectbox("Select the column for the y-axis:", new_dfs[0].columns, key="range_y_axis_col")
+    x_cols = st.multiselect("Select the column(s) for the x-axis:", new_dfs[0].columns, key="range_x_axis_col")
+    y_cols = st.multiselect("Select the column(s) for the y-axis:", new_dfs[0].columns, key="range_y_axis_col")
 
     # Checkbox to view the modified dataset
     if st.checkbox("View modified dataset?", key="view_modified_data"):
@@ -207,17 +292,18 @@ def plot_graph_with_range(dataframes):
         colors = colors[:color_count]
 
         for i, new_df in enumerate(new_dfs):
-            if graph_type == 'Scatter Plot':
-                plt.scatter(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}", color=colors[i])
-            elif graph_type == 'Line Plot':
-                plt.plot(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}", color=colors[i])
-            elif graph_type == 'Box Plot':
-                plt.boxplot([new_df[x_col], new_df[y_col]], positions=[i*2, i*2+1], labels=[f"Dataset {i+1} - {x_col}", f"Dataset {i+1} - {y_col}"])
-            elif graph_type == 'Bar Plot':
-                plt.bar(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}", color=colors[i])
+            for x_col, y_col in zip(x_cols, y_cols):
+                if graph_type == 'Scatter Plot':
+                    plt.scatter(new_df[x_col], new_df[y_col], label=f"Dataset {i+1} - {x_col} vs {y_col}", color=colors[i])
+                elif graph_type == 'Line Plot':
+                    plt.plot(new_df[x_col], new_df[y_col], label=f"Dataset {i+1} - {x_col} vs {y_col}", color=colors[i])
+                elif graph_type == 'Box Plot':
+                    plt.boxplot([new_df[x_col], new_df[y_col]], positions=[i*2, i*2+1], labels=[f"Dataset {i+1} - {x_col}", f"Dataset {i+1} - {y_col}"])
+                elif graph_type == 'Bar Plot':
+                    plt.bar(new_df[x_col], new_df[y_col], label=f"Dataset {i+1} - {x_col} vs {y_col}", color=colors[i])
 
-        plt.xlabel(x_col)
-        plt.ylabel(y_col)
+        plt.xlabel(', '.join(x_cols))
+        plt.ylabel(', '.join(y_cols))
         plt.title(f"{graph_type} - Comparison")
         plt.legend()
         st.pyplot(plt)
@@ -226,6 +312,23 @@ def plot_graph_with_range(dataframes):
     normalize = st.radio("Would you like to normalize the data?", ('Yes', 'No'), key="range_normalize_option")
     if normalize == 'Yes':
         normalize_and_plot(new_dfs)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def add_column(dataframes):
@@ -275,8 +378,10 @@ def add_column(dataframes):
 
     # Plot the graphs based on current DataFrames before the operation
     plot_type = st.selectbox("Select the graph type to plot:", ['Scatter Plot', 'Line Plot', 'Box Plot', 'Bar Plot'])
-    x_col = st.selectbox("Select the column for the x-axis:", st.session_state.current_columns, key="plot_x_col")
-    y_col = st.selectbox("Select the column for the y-axis:", st.session_state.current_columns, key="plot_y_col")
+
+    # Allow multiple selections for x and y columns
+    x_cols = st.multiselect("Select the columns for the x-axis:", st.session_state.current_columns, key="plot_x_cols")
+    y_cols = st.multiselect("Select the columns for the y-axis:", st.session_state.current_columns, key="plot_y_cols")
 
     # Define colors
     colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'purple', 'orange', 'brown']
@@ -286,23 +391,25 @@ def add_column(dataframes):
     colors = colors[:color_count]
 
     if st.button("Plot Updated DataFrames"):
-        plt.figure(figsize=(10, 6))
+        plt.figure(figsize=(12, 8))
         for i, df in enumerate(selected_dfs):
-            if x_col in df.columns and y_col in df.columns:
-                st.write(f"Plotting DataFrame from file {dataframes.index(df)+1}...")
-                if plot_type == 'Scatter Plot':
-                    plt.scatter(df[x_col], df[y_col], label=f"Dataset {dataframes.index(df)+1}", color=colors[i])
-                elif plot_type == 'Line Plot':
-                    plt.plot(df[x_col], df[y_col], label=f"Dataset {dataframes.index(df)+1}", color=colors[i])
-                elif plot_type == 'Box Plot':
-                    plt.boxplot([df[x_col], df[y_col]], positions=[i*2, i*2+1], labels=[f"Dataset {dataframes.index(df)+1} - {x_col}", f"Dataset {dataframes.index(df)+1} - {y_col}"])
-                elif plot_type == 'Bar Plot':
-                    plt.bar(df[x_col], df[y_col], label=f"Dataset {dataframes.index(df)+1}", color=colors[i])
-            else:
-                st.warning(f"Selected columns {x_col} or {y_col} do not exist in DataFrame from file {dataframes.index(df)+1}.")
+            for x_col in x_cols:
+                for y_col in y_cols:
+                    if x_col in df.columns and y_col in df.columns:
+                        st.write(f"Plotting DataFrame from file {dataframes.index(df)+1}...")
+                        if plot_type == 'Scatter Plot':
+                            plt.scatter(df[x_col], df[y_col], label=f"File {dataframes.index(df)+1}: {x_col} vs {y_col}", color=colors[i])
+                        elif plot_type == 'Line Plot':
+                            plt.plot(df[x_col], df[y_col], label=f"File {dataframes.index(df)+1}: {x_col} vs {y_col}", color=colors[i])
+                        elif plot_type == 'Box Plot':
+                            plt.boxplot([df[x_col], df[y_col]], positions=[i*2, i*2+1], labels=[f"File {dataframes.index(df)+1} - {x_col}", f"File {dataframes.index(df)+1} - {y_col}"])
+                        elif plot_type == 'Bar Plot':
+                            plt.bar(df[x_col], df[y_col], label=f"File {dataframes.index(df)+1}: {x_col} vs {y_col}", color=colors[i])
+                    else:
+                        st.warning(f"Selected columns {x_col} or {y_col} do not exist in DataFrame from file {dataframes.index(df)+1}.")
 
-        plt.xlabel(x_col)
-        plt.ylabel(y_col)
+        plt.xlabel("X-axis Columns")
+        plt.ylabel("Y-axis Columns")
         plt.title("Graph of Selected DataFrames")
         plt.legend()
         st.pyplot(plt)
@@ -320,6 +427,30 @@ def add_column(dataframes):
             st.session_state.current_columns = list(df.columns)
             st.write(f"Updated DataFrame from file {dataframes.index(df)+1}:")
             st.write(df)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 def multiply_column(dataframes):
     if not dataframes:
@@ -367,8 +498,10 @@ def multiply_column(dataframes):
 
     # Plot the graphs based on current DataFrames before the operation
     plot_type = st.selectbox("Select the graph type to plot:", ['Scatter Plot', 'Line Plot', 'Box Plot', 'Bar Plot'])
-    x_col = st.selectbox("Select the column for the x-axis:", st.session_state.current_columns, key="plot_x_col")
-    y_col = st.selectbox("Select the column for the y-axis:", st.session_state.current_columns, key="plot_y_col")
+
+    # Allow multiple selections for the x-axis and y-axis columns
+    x_cols = st.multiselect("Select columns for the x-axis:", st.session_state.current_columns, key="plot_x_cols")
+    y_cols = st.multiselect("Select columns for the y-axis:", st.session_state.current_columns, key="plot_y_cols")
 
     # Define colors
     colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'purple', 'orange', 'brown']
@@ -380,21 +513,23 @@ def multiply_column(dataframes):
     if st.button("Plot Updated DataFrames"):
         plt.figure(figsize=(10, 6))
         for i, df in enumerate(selected_dfs):
-            if x_col in df.columns and y_col in df.columns:
-                st.write(f"Plotting DataFrame from file {dataframes.index(df)+1}...")
-                if plot_type == 'Scatter Plot':
-                    plt.scatter(df[x_col], df[y_col], label=f"Dataset {dataframes.index(df)+1}", color=colors[i])
-                elif plot_type == 'Line Plot':
-                    plt.plot(df[x_col], df[y_col], label=f"Dataset {dataframes.index(df)+1}", color=colors[i])
-                elif plot_type == 'Box Plot':
-                    plt.boxplot([df[x_col], df[y_col]], positions=[i*2, i*2+1], labels=[f"Dataset {dataframes.index(df)+1} - {x_col}", f"Dataset {dataframes.index(df)+1} - {y_col}"])
-                elif plot_type == 'Bar Plot':
-                    plt.bar(df[x_col], df[y_col], label=f"Dataset {dataframes.index(df)+1}", color=colors[i])
-            else:
-                st.warning(f"Selected columns {x_col} or {y_col} do not exist in DataFrame from file {dataframes.index(df)+1}.")
+            for x_col in x_cols:
+                for y_col in y_cols:
+                    if x_col in df.columns and y_col in df.columns:
+                        st.write(f"Plotting DataFrame from file {dataframes.index(df)+1}...")
+                        if plot_type == 'Scatter Plot':
+                            plt.scatter(df[x_col], df[y_col], label=f"Dataset {dataframes.index(df)+1}: {x_col} vs {y_col}", color=colors[i])
+                        elif plot_type == 'Line Plot':
+                            plt.plot(df[x_col], df[y_col], label=f"Dataset {dataframes.index(df)+1}: {x_col} vs {y_col}", color=colors[i])
+                        elif plot_type == 'Box Plot':
+                            plt.boxplot([df[x_col], df[y_col]], positions=[i*2, i*2+1], labels=[f"Dataset {dataframes.index(df)+1} - {x_col}", f"Dataset {dataframes.index(df)+1} - {y_col}"])
+                        elif plot_type == 'Bar Plot':
+                            plt.bar(df[x_col], df[y_col], label=f"Dataset {dataframes.index(df)+1}: {x_col} vs {y_col}", color=colors[i])
+                    else:
+                        st.warning(f"Selected columns {x_col} or {y_col} do not exist in DataFrame from file {dataframes.index(df)+1}.")
 
-        plt.xlabel(x_col)
-        plt.ylabel(y_col)
+        plt.xlabel("X-Axis")
+        plt.ylabel("Y-Axis")
         plt.title("Graph of Selected DataFrames")
         plt.legend()
         st.pyplot(plt)
@@ -409,6 +544,7 @@ def multiply_column(dataframes):
             st.session_state.current_columns = list(df.columns)
             st.write(f"Updated DataFrame from file {dataframes.index(df)+1}:")
             st.write(df)
+
 
 # Streamlit App
 def main():
@@ -453,3 +589,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
