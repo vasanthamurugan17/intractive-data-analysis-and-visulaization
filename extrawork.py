@@ -1,14 +1,11 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-
-
-
-
-
-
-
-
+import os
+import shutil
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
+import numpy as np
 # Function to load and display the DataFrame(s)
 def load_dataframe():
     upload_type = st.radio("Do you want to upload a single file or multiple files?", ('Single File', 'Multiple Files'))
@@ -28,7 +25,7 @@ def load_dataframe():
         for uploaded_file in uploaded_files:
             try:
                 # Read the CSV file, starting from the 8th row for feature names
-                df = pd.read_csv(uploaded_file, header=8)  # Set header=7 to use the 8th row as header
+                df = pd.read_csv(uploaded_file, header=7)  # Set header=7 to use the 8th row as header
                 df = df.reset_index(drop=True)  # Reset index after skipping the first 7 rows
 
                 # Append the DataFrame to the list
@@ -42,191 +39,234 @@ def load_dataframe():
             except Exception as e:
                 st.error(f"Error loading file {uploaded_file.name}: {e}")
         
-        return dataframes
+        # Return the dataframes and corresponding file names
+        return dataframes, [file.name for file in uploaded_files]
     
     else:
         st.info("Please upload a CSV file.")
-        return None
+        return None, None
     
+# Function to save a plot as an image
+def save_plot(fig, filename, folder_path):
+    file_path = os.path.join(folder_path, filename)
+    fig.savefig(file_path)
+
+# Function to save a DataFrame as a CSV file
+def save_dataframe(df, filename, folder_path):
+    file_path = os.path.join(folder_path, filename)
+    df.to_csv(file_path, index=False)
+
+# Function to create and return a zip file
+def create_zip(folder_path):
+    zip_filename = folder_path + '.zip'
+    shutil.make_archive(folder_path, 'zip', folder_path)
+    return zip_filename
+
+# Function to provide download link for the zip file
+def download_zip(zip_filename):
+    with open(zip_filename, 'rb') as f:
+        st.download_button(
+            label="Download all generated outputs",
+            data=f,
+            file_name=os.path.basename(zip_filename),
+            mime='application/zip'
+        )
+
+def plot_combined_regression(X, y, ax, color, label_prefix):
+    model = LinearRegression().fit(X, y)
+    y_pred = model.predict(X)
+    
+    ax.plot(np.arange(len(y_pred)), y_pred, color=color, label=f"{label_prefix} Regression Line ({color})")
+    
+    equation = "y = " + " + ".join([f"{coef:.2f}x{i+1}" for i, coef in enumerate(model.coef_)]) + f" + {model.intercept_:.2f}"
+    r2 = model.score(X, y)
+    
+    ax.text(0.05, 0.95, f"Equation: {equation}", transform=ax.transAxes, fontsize=12, verticalalignment='top', color=color)
+    ax.text(0.05, 0.90, f"R² = {r2:.2f}", transform=ax.transAxes, fontsize=12, verticalalignment='top', color=color)
+    
+    return equation, r2
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-def normalize_and_plot(dataframes):
-    # Ensure dataframes is a list and check if it's empty
+# Modified function to normalize, plot, and save the outputs
+def normalize_and_plot(dataframes,file_names):
     if not isinstance(dataframes, list) or len(dataframes) == 0:
         st.error("No files uploaded. Please upload at least one CSV file.")
         return
 
-    # Step 1: Ask user to choose the normalization scope
+    output_folder = "normalized_outputs"
+    if os.path.exists(output_folder):
+        shutil.rmtree(output_folder)
+    os.makedirs(output_folder)
+
     scope = st.radio("Do you want to normalize and plot data for:", ["Single File", "Multiple Files", "All Files"], key="normalize_scope")
 
     if scope == "Single File":
-        # For a single file, select one DataFrame
-        selected_idx = st.selectbox("Select the DataFrame:", range(len(dataframes)), format_func=lambda x: f"File {x+1}", key="single_file_selector")
-
+        selected_idx = st.selectbox("Select the DataFrame:", range(len(dataframes)), format_func=lambda x: file_names[x], key="single_file_selector")
         selected_dfs = [dataframes[selected_idx]]
     elif scope == "Multiple Files":
-        # For multiple files, allow the user to select multiple DataFrames
-        selected_dfs = st.multiselect("Select DataFrames to normalize and plot:", range(len(dataframes)), format_func=lambda x: f"File {x+1}", key="multiple_file_selector")
-
+        selected_dfs = st.multiselect("Select DataFrames to normalize and plot:", range(len(dataframes)), format_func=lambda x: file_names[x], key="multiple_file_selector")
         if not selected_dfs:
             st.error("No files selected. Please select at least one file.")
             return
         selected_dfs = [dataframes[idx] for idx in selected_dfs]
-
     elif scope == "All Files":
-        # Use all DataFrames
         selected_dfs = dataframes
 
-    # Ensure there are selected DataFrames and that none of them are empty
     if not selected_dfs or any(df.empty for df in selected_dfs):
         st.error("One or more selected DataFrames are empty.")
         return
 
-    # Step 2: Select columns and plot type
-    graph_type = st.selectbox("Select the graph type:", ['Scatter Plot', 'Line Plot', 'Box Plot', 'Bar Plot'], key="normalize_graph_type")
-    
-    # Allow multiple features to be selected for the x-axis and y-axis
+    graph_type = st.selectbox("Select the graph type:", ['Scatter Plot', 'Line Plot', 'Box Plot', 'Bar Plot', 'Regression Plot'], key="normalize_graph_type")
     x_cols = st.multiselect("Select the columns for the x-axis:", dataframes[0].columns, key="normalize_x_axis_cols")
     y_cols = st.multiselect("Select the columns for the y-axis:", dataframes[0].columns, key="normalize_y_axis_cols")
 
-    # Define colors
     colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'purple', 'orange', 'brown']
     color_index = 0
 
     if st.button("Normalize and Plot"):
         plt.figure(figsize=(10, 6))
+        combined_X = []
+        combined_y = []
+
         for i, df in enumerate(selected_dfs):
             new_df = df.copy()
             max_values = new_df.iloc[:, 1:7].max()  # Adjust column range as necessary
             for column in new_df.columns[1:7]:
                 new_df[column] = new_df[column] / max_values[column]
 
+            save_dataframe(new_df, f"normalized_dataframe_{i+1}.csv", output_folder)
+
+            # Collect data for combined regression
+            if len(x_cols) > 1:
+                combined_X.append(new_df[x_cols])
+            else:
+                combined_X.append(new_df[x_cols[0]].values.reshape(-1, 1))
+            
+            combined_y.append(new_df[y_cols[0]].values)
+
+        # Concatenate the data for regression across all selected files
+        combined_X = np.vstack(combined_X)
+        combined_y = np.hstack(combined_y)
+
+        # Plotting the combined regression
+        ax = plt.gca()
+        if graph_type == 'Scatter Plot':
             for x_col in x_cols:
                 for y_col in y_cols:
-                    color = colors[color_index % len(colors)]
-                    color_index += 1  # Increment the color index to ensure unique colors
-                    if graph_type == 'Scatter Plot':
-                        plt.scatter(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}: {x_col} vs {y_col}", color=color)
-                    elif graph_type == 'Line Plot':
-                        plt.plot(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}: {x_col} vs {y_col}", color=color)
-                    elif graph_type == 'Box Plot':
-                        plt.boxplot([new_df[x_col], new_df[y_col]], positions=[i*2, i*2+1], labels=[f"Dataset {i+1} - {x_col}", f"Dataset {i+1} - {y_col}"])
-                    elif graph_type == 'Bar Plot':
-                        plt.bar(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}: {x_col} vs {y_col}", color=color)
-
+                    plt.scatter(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}: {x_col} vs {y_col}", color=colors[color_index % len(colors)])
+                    color_index += 1
+        elif graph_type == 'Line Plot':
+            for x_col in x_cols:
+                for y_col in y_cols:
+                    plt.plot(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}: {x_col} vs {y_col}", color=colors[color_index % len(colors)])
+                    color_index += 1
+        elif graph_type == 'Box Plot':
+            for y_col in y_cols:
+                new_df.boxplot(column=y_col, ax=ax, positions=np.arange(len(x_cols)), labels=x_cols, patch_artist=True)
+                plt.xlabel("Features")
+                plt.ylabel(y_col)
+                plt.title(f"Box Plot for {y_col}")
+                plt.legend([y_col])
+                plt.show()    
+        elif graph_type == 'Bar Plot':
+            for y_col in y_cols:
+                for x_col in x_cols:
+                    plt.bar(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}: {x_col} vs {y_col}", color=colors[color_index % len(colors)])
+                    color_index += 1
+        elif graph_type == 'Regression Plot':
+            equation, r2 = plot_combined_regression(combined_X, combined_y, ax, color=colors[color_index % len(colors)], label_prefix="Combined")
+                    
         plt.xlabel(", ".join(x_cols))
         plt.ylabel(", ".join(y_cols))
         plt.title("Normalized Graph")
         plt.legend()
         st.pyplot(plt)
+        
+        # Save the plot
+        save_plot(plt, "normalized_graph.png", output_folder)
 
+        # Create a zip file of the output folder
+        zip_filename = create_zip(output_folder)
 
+        # Provide a download link for the zip file
+        st.download_button("Download ZIP", data=open(zip_filename, "rb").read(), file_name=zip_filename)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-def plot_graph(dataframes):
+def plot_graph(dataframes, file_names):
     if dataframes:
         plot_type = st.radio("Do you want to plot the graph based on a single file or multiple files?", ("Single File", "Multiple Files"))
+        
+        # Create a folder to save outputs
+        output_folder = "Originaldataframe_outputs"
+        if os.path.exists(output_folder):
+            shutil.rmtree(output_folder)  # Clear the folder if it exists
+        os.makedirs(output_folder)
 
         if plot_type == "Single File":
-            df_idx = st.selectbox("Select the DataFrame:", range(len(dataframes)))
+            df_idx = st.selectbox("Select the DataFrame:", range(len(dataframes)), format_func=lambda x: file_names[x])
             df = dataframes[df_idx]
             x_cols = st.multiselect("Select the column(s) for the x-axis:", df.columns)
             y_cols = st.multiselect("Select the column(s) for the y-axis:", df.columns)
             if st.button("Plot Graph (Single File)"):
-                plt.figure(figsize=(10, 6))
-                for x_col, y_col in zip(x_cols, y_cols):
-                    plt.plot(df[x_col], df[y_col], label=f"File {df_idx+1} - {x_col} vs {y_col}")
+                plt.figure(figsize=(12, 8))
+                for x_col in x_cols:
+                    for y_col in y_cols:
+                        plt.plot(df[x_col], df[y_col], label=f"{x_col} vs {y_col}")
                 plt.xlabel(', '.join(x_cols))
                 plt.ylabel(', '.join(y_cols))
-                plt.title(f"Graph - File {df_idx+1}")
+                plt.title(f"Graph - {file_names[df_idx]}")
                 plt.legend()
                 st.pyplot(plt)
+                save_plot(plt, "originaldf_graph.png", output_folder)
 
         elif plot_type == "Multiple Files":
-            selected_dfs = st.multiselect("Select DataFrames for comparison:", range(len(dataframes)), format_func=lambda x: f"File {x+1}")
+            selected_dfs = st.multiselect("Select DataFrames for comparison:", range(len(dataframes)), format_func=lambda x: file_names[x])
             x_cols = st.multiselect("Select the column(s) for the x-axis:", dataframes[0].columns)
             y_cols = st.multiselect("Select the column(s) for the y-axis:", dataframes[0].columns)
             colors = ['blue', 'green', 'red', 'cyan', 'magenta', 'yellow', 'black', 'purple', 'orange', 'pink']  # Predefined color list
             if st.button("Plot Graph (Multiple Files)"):
-                plt.figure(figsize=(10, 6))
+                plt.figure(figsize=(12, 8))
                 for i, df_idx in enumerate(selected_dfs):
                     df = dataframes[df_idx]
                     color = colors[i % len(colors)]  # Cycle through the predefined colors
-                    for x_col, y_col in zip(x_cols, y_cols):
-                        plt.plot(df[x_col], df[y_col], label=f"File {df_idx+1} - {x_col} vs {y_col}", color=color)
+                    for x_col in x_cols:
+                        for y_col in y_cols:
+                            plt.plot(df[x_col], df[y_col], label=f"{file_names[df_idx]} - {x_col} vs {y_col}", color=color)
                 plt.xlabel(', '.join(x_cols))
                 plt.ylabel(', '.join(y_cols))
                 plt.title("Comparison Plot")
                 plt.legend()
                 st.pyplot(plt)
+                save_plot(plt, "originaldf_graph.png", output_folder)
+                
+        # Create a zip file of the output folder
+        zip_filename = create_zip(output_folder)
 
+        # Provide a download link for the zip file
+        download_zip(zip_filename)
+
+        # Normalize data and plot if needed
         normalize = st.radio("Would you like to normalize the data?", ('Yes', 'No'))
-        normalize = normalize == 'Yes'
-        normalize_and_plot(dataframes)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-def plot_graph_with_range(dataframes):
+        if normalize == 'Yes':
+            normalize_and_plot(dataframes, file_names)  # Assuming `normalize_and_plot` function is updated accordingly
+def plot_graph_with_range(dataframes,file_names):
     if not isinstance(dataframes, list) or len(dataframes) == 0:
         st.error("No files uploaded. Please upload at least one CSV file.")
         return
 
     operation_choice = st.radio("Do you want to perform this operation on a single file or multiple files?", ["Single File", "Multiple Files"], key="operation_choice")
+    # Create a folder to save outputs
+    output_folder = "Modifieddataframe_outputs"
+    if os.path.exists(output_folder):
+        shutil.rmtree(output_folder)  # Clear the folder if it exists
+    os.makedirs(output_folder)
+
 
     selected_dfs = []
     if operation_choice == "Single File":
-        selected_idx = st.selectbox("Select the file", range(len(dataframes)), key="single_file_selector_range")
+        selected_idx = st.selectbox("Select the file", range(len(dataframes)),format_func=lambda x: file_names[x], key="single_file_selector_range")
         selected_dfs.append(dataframes[selected_idx])
     else:
-        selected_idxs = st.multiselect("Select the files", range(len(dataframes)), key="multiple_file_selector_range")
+        selected_idxs = st.multiselect("Select the files", range(len(dataframes)),format_func=lambda x: file_names[x], key="multiple_file_selector_range")
         selected_dfs = [dataframes[idx] for idx in selected_idxs]
 
     if not selected_dfs or any(df.empty for df in selected_dfs):
@@ -272,7 +312,11 @@ def plot_graph_with_range(dataframes):
                 new_dfs.append(new_df)
 
     # Graph plotting and normalization options as before
-    graph_type = st.selectbox("Select the graph type:", ['Scatter Plot', 'Line Plot', 'Box Plot', 'Bar Plot'], key="range_graph_type")
+    graph_type = st.selectbox(
+    "Select the graph type:", 
+    ['Scatter Plot', 'Line Plot', 'Box Plot', 'Bar Plot', 'Regression Plot'], 
+    key=f"normalize_graph_type_{id(new_dfs)}"
+)   
     x_cols = st.multiselect("Select the column(s) for the x-axis:", new_dfs[0].columns, key="range_x_axis_col")
     y_cols = st.multiselect("Select the column(s) for the y-axis:", new_dfs[0].columns, key="range_y_axis_col")
 
@@ -281,32 +325,69 @@ def plot_graph_with_range(dataframes):
         for i, new_df in enumerate(new_dfs):
             st.write(f"Modified DataFrame {i+1}")
             st.write(new_df)
+            save_dataframe(new_df, f"Modified_dataframe_{i+1}.csv", output_folder)
 
     # Button to plot graph
     if st.button("Plot Graph with Range", key="plot_graph_with_range"):
         plt.figure(figsize=(10, 6))
         colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'purple', 'orange', 'brown']
-        color_count = len(new_dfs)
-        if color_count > len(colors):
-            colors *= (color_count // len(colors)) + 1
-        colors = colors[:color_count]
-
+        color_index = 0
+        ax=plt.gca()
         for i, new_df in enumerate(new_dfs):
-            for x_col, y_col in zip(x_cols, y_cols):
-                if graph_type == 'Scatter Plot':
-                    plt.scatter(new_df[x_col], new_df[y_col], label=f"Dataset {i+1} - {x_col} vs {y_col}", color=colors[i])
-                elif graph_type == 'Line Plot':
-                    plt.plot(new_df[x_col], new_df[y_col], label=f"Dataset {i+1} - {x_col} vs {y_col}", color=colors[i])
-                elif graph_type == 'Box Plot':
-                    plt.boxplot([new_df[x_col], new_df[y_col]], positions=[i*2, i*2+1], labels=[f"Dataset {i+1} - {x_col}", f"Dataset {i+1} - {y_col}"])
-                elif graph_type == 'Bar Plot':
-                    plt.bar(new_df[x_col], new_df[y_col], label=f"Dataset {i+1} - {x_col} vs {y_col}", color=colors[i])
+            combined_X = []
+            combined_y = []
+            # Collect data for combined regression
+            if len(x_cols) > 1:
+                combined_X.append(new_df[x_cols])
+            else:
+                combined_X.append(new_df[x_cols[0]].values.reshape(-1, 1))
+            
+            combined_y.append(new_df[y_cols[0]].values)
 
+        # Concatenate the data for regression across all selected files
+        combined_X = np.vstack(combined_X)
+        combined_y = np.hstack(combined_y)
+
+        # Plotting the combined regression
+        ax = plt.gca()
+        if graph_type == 'Scatter Plot':
+            for x_col in x_cols:
+                for y_col in y_cols:
+                    plt.scatter(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}: {x_col} vs {y_col}", color=colors[color_index % len(colors)])
+                    color_index += 1
+        elif graph_type == 'Line Plot':
+            for x_col in x_cols:
+                for y_col in y_cols:
+                    plt.plot(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}: {x_col} vs {y_col}", color=colors[color_index % len(colors)])
+                    color_index += 1
+        elif graph_type == 'Box Plot':
+            for y_col in y_cols:
+                new_df.boxplot(column=y_col, ax=ax, positions=np.arange(len(x_cols)), labels=x_cols, patch_artist=True)
+                plt.xlabel("Features")
+                plt.ylabel(y_col)
+                plt.title(f"Box Plot for {y_col}")
+                plt.legend([y_col])
+                plt.show()    
+        elif graph_type == 'Bar Plot':
+            for y_col in y_cols:
+                for x_col in x_cols:
+                    plt.bar(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}: {x_col} vs {y_col}", color=colors[color_index % len(colors)])
+                    color_index += 1
+        elif graph_type == 'Regression Plot':
+            equation, r2 = plot_combined_regression(combined_X, combined_y, ax, color=colors[color_index % len(colors)], label_prefix="Combined")
+        
         plt.xlabel(', '.join(x_cols))
         plt.ylabel(', '.join(y_cols))
         plt.title(f"{graph_type} - Comparison")
         plt.legend()
         st.pyplot(plt)
+        save_plot(plt, "modifieddf_graph.png", output_folder)
+# Create a zip file of the output folder
+    zip_filename = create_zip(output_folder)
+
+        # Provide a download link for the zip file
+    download_zip(zip_filename)
+    
 
     # Normalization option
     normalize = st.radio("Would you like to normalize the data?", ('Yes', 'No'), key="range_normalize_option")
@@ -315,38 +396,29 @@ def plot_graph_with_range(dataframes):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-def add_column(dataframes):
+def add_column(dataframes,file_names):
     if not dataframes:
         st.error("No files uploaded. Please upload at least one CSV file.")
         return
+    
+        # Create a folder to save outputs
+    output_folder = "Modifieddataframe_outputs"
+    if os.path.exists(output_folder):
+        shutil.rmtree(output_folder)  # Clear the folder if it exists
+    os.makedirs(output_folder)
+
 
     # Step 1: Ask user to choose the scope
     scope = st.radio("Do you want to add a column for:", ["Single File", "Multiple Files", "All Files"], key="add_column_scope")
 
     if scope == "Single File":
         # For a single file, select one DataFrame
-        selected_idx = st.selectbox("Select the DataFrame:", range(len(dataframes)), format_func=lambda x: f"File {x+1}", key="single_file_selector")
+        selected_idx = st.selectbox("Select the DataFrame:", range(len(dataframes)), format_func=lambda x: file_names[x], key="single_file_selector")
         selected_dfs = [dataframes[selected_idx]]
 
     elif scope == "Multiple Files":
         # For multiple files, allow the user to select multiple DataFrames
-        selected_dfs = st.multiselect("Select DataFrames to add column:", range(len(dataframes)), format_func=lambda x: f"File {x+1}", key="multiple_file_selector")
+        selected_dfs = st.multiselect("Select DataFrames to add column:", range(len(dataframes)), format_func=lambda x: file_names[x], key="multiple_file_selector")
 
         if not selected_dfs:
             st.error("No files selected. Please select at least one file.")
@@ -377,7 +449,7 @@ def add_column(dataframes):
     new_col_name = st.text_input("Enter the name of the new column:")
 
     # Plot the graphs based on current DataFrames before the operation
-    plot_type = st.selectbox("Select the graph type to plot:", ['Scatter Plot', 'Line Plot', 'Box Plot', 'Bar Plot'])
+    plot_type = st.selectbox("Select the graph type to plot:", ['Scatter Plot', 'Line Plot', 'Box Plot', 'Bar Plot','Regression Plot'])
 
     # Allow multiple selections for x and y columns
     x_cols = st.multiselect("Select the columns for the x-axis:", st.session_state.current_columns, key="plot_x_cols")
@@ -392,27 +464,59 @@ def add_column(dataframes):
 
     if st.button("Plot Updated DataFrames"):
         plt.figure(figsize=(12, 8))
-        for i, df in enumerate(selected_dfs):
+        colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'purple', 'orange', 'brown']
+        color_index = 0
+        ax=plt.gca()
+        for i, new_df in enumerate(selected_dfs):
+            combined_X = []
+            combined_y = []
+            # Collect data for combined regression
+            if len(x_cols) > 1:
+                combined_X.append(new_df[x_cols])
+            else:
+                combined_X.append(new_df[x_cols[0]].values.reshape(-1, 1))
+            
+            combined_y.append(new_df[y_cols[0]].values)
+
+        # Concatenate the data for regression across all selected files
+        combined_X = np.vstack(combined_X)
+        combined_y = np.hstack(combined_y)
+
+        # Plotting the combined regression
+        ax = plt.gca()
+        if plot_type == 'Scatter Plot':
             for x_col in x_cols:
                 for y_col in y_cols:
-                    if x_col in df.columns and y_col in df.columns:
-                        st.write(f"Plotting DataFrame from file {dataframes.index(df)+1}...")
-                        if plot_type == 'Scatter Plot':
-                            plt.scatter(df[x_col], df[y_col], label=f"File {dataframes.index(df)+1}: {x_col} vs {y_col}", color=colors[i])
-                        elif plot_type == 'Line Plot':
-                            plt.plot(df[x_col], df[y_col], label=f"File {dataframes.index(df)+1}: {x_col} vs {y_col}", color=colors[i])
-                        elif plot_type == 'Box Plot':
-                            plt.boxplot([df[x_col], df[y_col]], positions=[i*2, i*2+1], labels=[f"File {dataframes.index(df)+1} - {x_col}", f"File {dataframes.index(df)+1} - {y_col}"])
-                        elif plot_type == 'Bar Plot':
-                            plt.bar(df[x_col], df[y_col], label=f"File {dataframes.index(df)+1}: {x_col} vs {y_col}", color=colors[i])
-                    else:
-                        st.warning(f"Selected columns {x_col} or {y_col} do not exist in DataFrame from file {dataframes.index(df)+1}.")
+                    plt.scatter(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}: {x_col} vs {y_col}", color=colors[color_index % len(colors)])
+                    color_index += 1
+        elif plot_type == 'Line Plot':
+            for x_col in x_cols:
+                for y_col in y_cols:
+                    plt.plot(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}: {x_col} vs {y_col}", color=colors[color_index % len(colors)])
+                    color_index += 1
+        elif plot_type == 'Box Plot':
+            for y_col in y_cols:
+                new_df.boxplot(column=y_col, ax=ax, positions=np.arange(len(x_cols)), labels=x_cols, patch_artist=True)
+                plt.xlabel("Features")
+                plt.ylabel(y_col)
+                plt.title(f"Box Plot for {y_col}")
+                plt.legend([y_col])
+                plt.show()    
+        elif plot_type== 'Bar Plot':
+            for y_col in y_cols:
+                for x_col in x_cols:
+                    plt.bar(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}: {x_col} vs {y_col}", color=colors[color_index % len(colors)])
+                    color_index += 1
+        elif plot_type == 'Regression Plot':
+            equation, r2 = plot_combined_regression(combined_X, combined_y, ax, color=colors[color_index % len(colors)], label_prefix="Combined")
 
         plt.xlabel("X-axis Columns")
         plt.ylabel("Y-axis Columns")
         plt.title("Graph of Selected DataFrames")
         plt.legend()
         st.pyplot(plt)
+        save_plot(plt, "Added_additional_df_graph.png", output_folder)
+
 
     if st.button("Add Column"):
         # Update the DataFrames with the new column
@@ -427,47 +531,33 @@ def add_column(dataframes):
             st.session_state.current_columns = list(df.columns)
             st.write(f"Updated DataFrame from file {dataframes.index(df)+1}:")
             st.write(df)
+            save_dataframe(df, f"Added_additional_df_{df+1}.csv", output_folder)
+# Create a zip file of the output folder
+    zip_filename = create_zip(output_folder)
 
+        # Provide a download link for the zip file
+    download_zip(zip_filename)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-def multiply_column(dataframes):
+def multiply_column(dataframes,file_names):
     if not dataframes:
         st.error("No files uploaded. Please upload at least one CSV file.")
         return
 
+    output_folder = "Multiplyied_scaling_factor_dataframes_outputs"
+    if os.path.exists(output_folder):
+        shutil.rmtree(output_folder)  # Clear the folder if it exists
+    os.makedirs(output_folder)
     # Step 1: Ask user to choose the scope
     scope = st.radio("Do you want to multiply a column for:", ["Single File", "Multiple Files", "All Files"], key="multiply_column_scope")
 
     if scope == "Single File":
         # For a single file, select one DataFrame
-        selected_idx = st.selectbox("Select the DataFrame:", range(len(dataframes)), format_func=lambda x: f"File {x+1}", key="single_file_selector")
+        selected_idx = st.selectbox("Select the DataFrame:", range(len(dataframes)), format_func=lambda x: file_names[x], key="single_file_selector")
         selected_dfs = [dataframes[selected_idx]]
 
     elif scope == "Multiple Files":
         # For multiple files, allow the user to select multiple DataFrames
-        selected_dfs = st.multiselect("Select DataFrames to multiply column:", range(len(dataframes)), format_func=lambda x: f"File {x+1}", key="multiple_file_selector")
+        selected_dfs = st.multiselect("Select DataFrames to multiply column:", range(len(dataframes)), format_func=lambda x: file_names[x], key="multiple_file_selector")
 
         if not selected_dfs:
             st.error("No files selected. Please select at least one file.")
@@ -497,7 +587,7 @@ def multiply_column(dataframes):
     new_col_name = st.text_input("Enter the name of the new column:")
 
     # Plot the graphs based on current DataFrames before the operation
-    plot_type = st.selectbox("Select the graph type to plot:", ['Scatter Plot', 'Line Plot', 'Box Plot', 'Bar Plot'])
+    plot_type = st.selectbox("Select the graph type to plot:", ['Scatter Plot', 'Line Plot', 'Box Plot', 'Bar Plot','Regression Plot'])
 
     # Allow multiple selections for the x-axis and y-axis columns
     x_cols = st.multiselect("Select columns for the x-axis:", st.session_state.current_columns, key="plot_x_cols")
@@ -512,27 +602,59 @@ def multiply_column(dataframes):
 
     if st.button("Plot Updated DataFrames"):
         plt.figure(figsize=(10, 6))
-        for i, df in enumerate(selected_dfs):
+        colors = ['b', 'g', 'r', 'c', 'm', 'y', 'k', 'purple', 'orange', 'brown']
+        color_index = 0
+        ax=plt.gca()
+        for i, new_df in enumerate(selected_dfs):
+            combined_X = []
+            combined_y = []
+            # Collect data for combined regression
+            if len(x_cols) > 1:
+                combined_X.append(new_df[x_cols])
+            else:
+                combined_X.append(new_df[x_cols[0]].values.reshape(-1, 1))
+            
+            combined_y.append(new_df[y_cols[0]].values)
+
+        # Concatenate the data for regression across all selected files
+        combined_X = np.vstack(combined_X)
+        combined_y = np.hstack(combined_y)
+
+        # Plotting the combined regression
+        ax = plt.gca()
+        if plot_type == 'Scatter Plot':
             for x_col in x_cols:
                 for y_col in y_cols:
-                    if x_col in df.columns and y_col in df.columns:
-                        st.write(f"Plotting DataFrame from file {dataframes.index(df)+1}...")
-                        if plot_type == 'Scatter Plot':
-                            plt.scatter(df[x_col], df[y_col], label=f"Dataset {dataframes.index(df)+1}: {x_col} vs {y_col}", color=colors[i])
-                        elif plot_type == 'Line Plot':
-                            plt.plot(df[x_col], df[y_col], label=f"Dataset {dataframes.index(df)+1}: {x_col} vs {y_col}", color=colors[i])
-                        elif plot_type == 'Box Plot':
-                            plt.boxplot([df[x_col], df[y_col]], positions=[i*2, i*2+1], labels=[f"Dataset {dataframes.index(df)+1} - {x_col}", f"Dataset {dataframes.index(df)+1} - {y_col}"])
-                        elif plot_type == 'Bar Plot':
-                            plt.bar(df[x_col], df[y_col], label=f"Dataset {dataframes.index(df)+1}: {x_col} vs {y_col}", color=colors[i])
-                    else:
-                        st.warning(f"Selected columns {x_col} or {y_col} do not exist in DataFrame from file {dataframes.index(df)+1}.")
+                    plt.scatter(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}: {x_col} vs {y_col}", color=colors[color_index % len(colors)])
+                    color_index += 1
+        elif plot_type == 'Line Plot':
+            for x_col in x_cols:
+                for y_col in y_cols:
+                    plt.plot(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}: {x_col} vs {y_col}", color=colors[color_index % len(colors)])
+                    color_index += 1
+        elif plot_type == 'Box Plot':
+            for y_col in y_cols:
+                new_df.boxplot(column=y_col, ax=ax, positions=np.arange(len(x_cols)), labels=x_cols, patch_artist=True)
+                plt.xlabel("Features")
+                plt.ylabel(y_col)
+                plt.title(f"Box Plot for {y_col}")
+                plt.legend([y_col])
+                plt.show()    
+        elif plot_type== 'Bar Plot':
+            for y_col in y_cols:
+                for x_col in x_cols:
+                    plt.bar(new_df[x_col], new_df[y_col], label=f"Dataset {i+1}: {x_col} vs {y_col}", color=colors[color_index % len(colors)])
+                    color_index += 1
+        elif plot_type == 'Regression Plot':
+            equation, r2 = plot_combined_regression(combined_X, combined_y, ax, color=colors[color_index % len(colors)], label_prefix="Combined")
 
         plt.xlabel("X-Axis")
         plt.ylabel("Y-Axis")
         plt.title("Graph of Selected DataFrames")
         plt.legend()
         st.pyplot(plt)
+        save_plot(plt, "Added_additional_df_graph.png", output_folder)
+
 
     if st.button("Multiply Column"):
         # Update the DataFrames with the new column
@@ -544,22 +666,33 @@ def multiply_column(dataframes):
             st.session_state.current_columns = list(df.columns)
             st.write(f"Updated DataFrame from file {dataframes.index(df)+1}:")
             st.write(df)
+            save_dataframe(df, f"Added_additional_df_{df+1}.csv", output_folder)
+# Create a zip file of the output folder
+    zip_filename = create_zip(output_folder)
 
-
+        # Provide a download link for the zip file
+    download_zip(zip_filename)
+          
 # Streamlit App
 def main():
     st.title("Interactive Data Analysis and Visualization")
     st.sidebar.title("Navigation")
     st.sidebar.markdown("Use the navigation below to select the operation:")
     
-    dataframes = load_dataframe()
+    dataframes, file_names = load_dataframe()
+    if dataframes is not None and file_names is not None:
+        # Continue with your code
+        st.write(f"Successfully loaded {len(dataframes)} files.")
+        # Further processing can be done here
+    else:
+        st.warning("No files were uploaded or there was an error in loading the files.")
     if dataframes:
         df = dataframes[0]  # Assuming operations are on the first DataFrame for simplicity
         original_df = df.copy()
 
         st.sidebar.header("Options")
         option = st.sidebar.radio("Select an Option", [
-            "Plot Graph based on DataFrame",
+            "Plot Graph based on Qriginal dataframe",
             "Plot Graph with Range",
             "Normalize and Plot",
             "Create a new column by Add or Multiply by Column",
@@ -571,22 +704,21 @@ def main():
             df_to_use = original_df if use_original_df == "Original" else df
 
             if option == "Plot Graph based on DataFrame":
-                plot_graph(dataframes)
+                plot_graph(dataframes,file_names)
             elif option == "Plot Graph with Range":
-                plot_graph_with_range(dataframes)
+                plot_graph_with_range(dataframes, file_names)
             elif option == "Normalize and Plot":
-                normalize_and_plot(dataframes)
+                normalize_and_plot(dataframes,file_names)
 
         elif option in ["Create a new column by Add or Multiply by Column", "creation of column by Multiplying factor"]:
             modify_original = st.sidebar.radio("Modify original DataFrame or store separately?", ["Original", "Separately"])
             if option == "Create a new column by Add or Multiply by Column":
-                add_column(dataframes)
+                add_column(dataframes,file_names)
             elif option == "creation of column by Multiplying factor":
-                multiply_column(dataframes)
+                multiply_column(dataframes,file_names)
             
             if modify_original == "Original":
                 original_df.update(df)
 
 if __name__ == "__main__":
     main()
-
