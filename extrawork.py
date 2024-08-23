@@ -6,6 +6,28 @@ import shutil
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
 import numpy as np
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Function to load and display the DataFrame(s)
 def load_dataframe():
     upload_type = st.radio("Do you want to upload a single file or multiple files?", ('Single File', 'Multiple Files'))
@@ -25,7 +47,7 @@ def load_dataframe():
         for uploaded_file in uploaded_files:
             try:
                 # Read the CSV file, starting from the 8th row for feature names
-                df = pd.read_csv(uploaded_file, header=7)  # Set header=7 to use the 8th row as header
+                df = pd.read_csv(uploaded_file, header=8)  # Set header=7 to use the 8th row as header
                 df = df.reset_index(drop=True)  # Reset index after skipping the first 7 rows
 
                 # Append the DataFrame to the list
@@ -39,13 +61,32 @@ def load_dataframe():
             except Exception as e:
                 st.error(f"Error loading file {uploaded_file.name}: {e}")
         
-        # Return the dataframes and corresponding file names
         return dataframes, [file.name for file in uploaded_files]
     
     else:
         st.info("Please upload a CSV file.")
-        return None, None
+        return None,None
     
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Function to save a plot as an image
 def save_plot(fig, filename, folder_path):
     file_path = os.path.join(folder_path, filename)
@@ -72,6 +113,34 @@ def download_zip(zip_filename):
             mime='application/zip'
         )
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def plot_combined_regression(X, y, ax, color, label_prefix):
     model = LinearRegression().fit(X, y)
     y_pred = model.predict(X)
@@ -85,6 +154,24 @@ def plot_combined_regression(X, y, ax, color, label_prefix):
     ax.text(0.05, 0.90, f"R² = {r2:.2f}", transform=ax.transAxes, fontsize=12, verticalalignment='top', color=color)
     
     return equation, r2
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # Modified function to normalize, plot, and save the outputs
@@ -191,6 +278,30 @@ def normalize_and_plot(dataframes,file_names):
         # Provide a download link for the zip file
         st.download_button("Download ZIP", data=open(zip_filename, "rb").read(), file_name=zip_filename)
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def plot_graph(dataframes, file_names):
     if dataframes:
         plot_type = st.radio("Do you want to plot the graph based on a single file or multiple files?", ("Single File", "Multiple Files"))
@@ -248,6 +359,36 @@ def plot_graph(dataframes, file_names):
         normalize = st.radio("Would you like to normalize the data?", ('Yes', 'No'))
         if normalize == 'Yes':
             normalize_and_plot(dataframes, file_names)  # Assuming `normalize_and_plot` function is updated accordingly
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def plot_graph_with_range(dataframes,file_names):
     if not isinstance(dataframes, list) or len(dataframes) == 0:
         st.error("No files uploaded. Please upload at least one CSV file.")
@@ -392,7 +533,25 @@ def plot_graph_with_range(dataframes,file_names):
     # Normalization option
     normalize = st.radio("Would you like to normalize the data?", ('Yes', 'No'), key="range_normalize_option")
     if normalize == 'Yes':
-        normalize_and_plot(new_dfs)
+        normalize_and_plot(new_dfs,file_names)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -538,6 +697,38 @@ def add_column(dataframes,file_names):
         # Provide a download link for the zip file
     download_zip(zip_filename)
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 def multiply_column(dataframes,file_names):
     if not dataframes:
         st.error("No files uploaded. Please upload at least one CSV file.")
@@ -680,19 +871,15 @@ def main():
     st.sidebar.markdown("Use the navigation below to select the operation:")
     
     dataframes, file_names = load_dataframe()
+    
     if dataframes is not None and file_names is not None:
-        # Continue with your code
         st.write(f"Successfully loaded {len(dataframes)} files.")
-        # Further processing can be done here
-    else:
-        st.warning("No files were uploaded or there was an error in loading the files.")
-    if dataframes:
         df = dataframes[0]  # Assuming operations are on the first DataFrame for simplicity
         original_df = df.copy()
 
         st.sidebar.header("Options")
         option = st.sidebar.radio("Select an Option", [
-            "Plot Graph based on Qriginal dataframe",
+            "Plot Graph based on DataFrame",
             "Plot Graph with Range",
             "Normalize and Plot",
             "Create a new column by Add or Multiply by Column",
@@ -719,6 +906,9 @@ def main():
             
             if modify_original == "Original":
                 original_df.update(df)
+    else:
+        st.warning("No files were uploaded or there was an error in loading the files.")
+
 
 if __name__ == "__main__":
     main()
